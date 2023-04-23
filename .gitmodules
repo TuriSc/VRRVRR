@@ -1,0 +1,6 @@
+[submodule "lib/RP2040-Keypad-Matrix"]
+	path = lib/RP2040-Keypad-Matrix
+	url = https://github.com/TuriSc/RP2040-Keypad-Matrix
+[submodule "lib/RP2040-Battery-Check"]
+	path = lib/RP2040-Battery-Check
+	url = https://github.com/TuriSc/RP2040-Battery-Check
