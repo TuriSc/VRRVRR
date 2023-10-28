@@ -448,13 +448,9 @@ void key_long_pressed(uint8_t key){
     }
 }
 
-void battery_check_callback(uint16_t battery_mv){
-    if (battery_mv < LOW_BATT_THRESHOLD){
-        // Low battery detected
-        gpio_put(LOW_BATT_LED_PIN, 1);
-    } else {
-        gpio_put(LOW_BATT_LED_PIN, 0);
-    }
+void battery_low_callback(uint16_t battery_mv){
+    gpio_put(LOW_BATT_LED_PIN, 1);
+    battery_check_stop();
 }
 
 int main() {
@@ -486,7 +482,7 @@ int main() {
     gpio_set_dir(LOW_BATT_LED_PIN, GPIO_OUT);
 
     adc_init();
-    battery_check_init(5000);
+    battery_check_init(5000, NULL, battery_low_callback);
 
     add_repeating_timer_ms(5000, inactive_check, NULL, &inactive_alarm);
 
