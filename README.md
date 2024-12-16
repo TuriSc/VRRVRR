@@ -63,6 +63,7 @@ cmake .. && make
 ```
 
 After that, simply connect your Pico to your computer via USB holding the BOOTSEL button and copy the .uf2 file to flash the program.
+If you've not changed the circuit and are happy with the default config.h parameters, you can flash the correct [precompiled .uf2 file](/dist) for your Pico version.
 
 ### More info
 

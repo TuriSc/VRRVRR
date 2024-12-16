@@ -1,8 +1,14 @@
 cmake_minimum_required(VERSION 3.13)
  
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
- 
-project(VRRVRR C CXX ASM)
+
+if (${PICO_BOARD} STREQUAL "pico2")
+project(VRRVRR_RP2350 C CXX ASM)
+add_definitions(-DBOARD_IS_PICO2)
+else()
+project(VRRVRR_RP2040 C CXX ASM)
+add_definitions(-DBOARD_IS_PICO)
+endif ()
  
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
