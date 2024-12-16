@@ -1,7 +1,8 @@
-/* VRRVRR
- * LED-flashing, haptic metronome with presets and tap tempo. Written for Raspberry Pi Pico.
- * By Turi Scandurra – https://turiscandurra.com/circuits
- * v1.0.1 - 2023.03.25
+/**
+ * @file main.c
+ * @brief VRRVRR - LED-flashing, haptic metronome with presets and tap tempo.
+ * Written for Raspberry Pi Pico.
+ * @author Turi Scandurra
  */
 
 #include <stdio.h>
@@ -16,6 +17,10 @@
 #include "keypad.h"             // https://github.com/TuriSc/RP2040-Keypad-Matrix
 #include "battery-check.h"      // https://github.com/TuriSc/RP2040-Battery-Check
 
+/**
+ * @defgroup GlobalVariables Global Variables
+ * @{
+ */
 uint8_t tempo;                  // BPM. Valid range is 1 to 255.
 uint8_t subdiv = 1;             // Subdivisions of the current measure. Max 10.
 bool accent = true;             // Whether to vibrate at a different frequency on the first subdivision of a beat
@@ -46,9 +51,19 @@ uint8_t preset_buffer[FLASH_PAGE_SIZE];
 uint8_t tempo_presets[4] = DEFAULT_TEMPO_PRESETS;
 uint8_t subdiv_presets[4] = DEFAULT_SUBDIV_PRESETS;
 uint8_t accent_presets[4] = DEFAULT_ACCENT_PRESETS;
+/** @} */
 
-bool tick(); // This function gets called on every subdivision of the measure
+bool tick();
+int64_t blink_complete();
+int64_t vibrate_complete();
 
+/**
+ * @defgroup FlashFunctions Flash Functions
+ * @{
+ */
+/**
+ * @brief Write the tempo presets to flash memory.
+ */
 void write_flash_presets() {
     uint8_t flash_buffer[FLASH_PAGE_SIZE] = MAGIC_NUMBER; // Initialize the buffer with a signature
     for(uint8_t i=0; i<4; i++){
@@ -62,6 +77,9 @@ void write_flash_presets() {
 	restore_interrupts (ints_id);
 }
 
+/**
+ * @brief Read the tempo presets from flash memory.
+ */
 void read_flash_presets(){ // Only called at startup
     // Read address is different than write address
     const uint8_t *stored_presets = (const uint8_t *) (XIP_BASE + FLASH_TARGET_OFFSET);
@@ -91,20 +109,12 @@ void read_flash_presets(){ // Only called at startup
         }
     }
 }
+/** @} */
 
-void rgb(bool r, bool g, bool b){
-    // Since we're using common anode RGB LEDs,
-    // RGB values have to be inverted 
-    gpio_put(RGB_R_PIN, !r);
-    gpio_put(RGB_G_PIN, !g);
-    gpio_put(RGB_B_PIN, !b);
-}
-
-int64_t power_on_complete(){
-    gpio_put(PICO_DEFAULT_LED_PIN, 0);
-    rgb(0, 0, 0); // Off
-    return 0;
-}
+/**
+ * @defgroup SupportingFunctions Supporting Functions
+ * @{
+ */
 
 bool inactive_check(){
     if(paused && (time_us_64() - last_press > INACTIVE_TIMEOUT)){
@@ -114,6 +124,19 @@ bool inactive_check(){
     return true;
 }
 
+/**
+ * @brief Battery low callback.
+ * @param battery_mv Battery voltage in millivolts.
+ */
+void battery_low_callback(uint16_t battery_mv){
+    gpio_put(LOW_BATT_LED_PIN, 1);
+    battery_check_stop();
+}
+
+/**
+ * @brief Declare all program information.
+ * 
+ */
 void bi_decl_all(){
     bi_decl(bi_program_name(PROGRAM_NAME));
     bi_decl(bi_program_description(PROGRAM_DESCRIPTION));
@@ -127,19 +150,51 @@ void bi_decl_all(){
     bi_decl(bi_1pin_with_name(LOW_BATT_LED_PIN, LOW_BATT_LED_DESCRIPTION));
 }
 
+/**
+ * @brief Convert beats per minute to interval in microseconds.
+ * 
+ * @param t Beats per minute.
+ * @return Interval in microseconds.
+ */
 uint64_t bpm_to_interval(uint8_t t){
     return (uint64_t)((60 * 1000 * 1000) / t);
 }
 
+/**
+ * @brief Convert interval in microseconds to beats per minute.
+ * 
+ * @param interval Interval in microseconds.
+ * @return Beats per minute.
+ */
 uint8_t interval_to_bpm(uint64_t interval){
     return (uint8_t)((60*1000*1000) / interval);
 }
+/** @} */
 
-int64_t blink_complete() {
-    rgb(0, 0, 0); // Off
-    return 0;
+/**
+ * @defgroup LEDFunctions LED Functions
+ * @{
+ */
+/**
+ * @brief Set the RGB LED to the specified color.
+ * @param r Red component of the color.
+ * @param g Green component of the color.
+ * @param b Blue component of the color.
+ */
+void rgb(bool r, bool g, bool b){
+    // Since we're using common anode RGB LEDs,
+    // RGB values have to be inverted 
+    gpio_put(RGB_R_PIN, !r);
+    gpio_put(RGB_G_PIN, !g);
+    gpio_put(RGB_B_PIN, !b);
 }
 
+
+/**
+ * @brief Blink the RGB LED for the specified duration.
+ * @param ms Duration of the blink in milliseconds.
+ * @param color Color of the blink.
+ */
 void blink(uint16_t ms, uint8_t color){ // LEDs blink for the specified time in milliseconds
     switch(color){
         case RED:
@@ -159,11 +214,11 @@ void blink(uint16_t ms, uint8_t color){ // LEDs blink for the specified time in 
     blink_alarm = add_alarm_in_ms(ms, blink_complete, NULL, true);
 }
 
-int64_t vibrate_complete() {
-    pwm_set_gpio_level(MOTOR_PIN, 0);
-    return 0;
-}
-
+/**
+ * @brief Vibrate the motor for the specified duration.
+ * @param ms Duration of the vibration in milliseconds.
+ * @param is_first Whether this is the first subdivision of the beat.
+ */
 void vibrate(uint16_t ms, bool is_first){
     if(is_first){
         pwm_set_wrap(motor_pin_slice, 1);
@@ -176,22 +231,75 @@ void vibrate(uint16_t ms, bool is_first){
     if (vibrate_alarm) cancel_alarm(vibrate_alarm);
     vibrate_alarm = add_alarm_in_ms(ms, vibrate_complete, NULL, true);
 }
+/** @} */
 
+/**
+ * @defgroup AlarmFunctions Alarm Functions
+ * @{
+ */
+/**
+ * @brief Alarm handler for the power-on alarm.
+ * @return 0 on success.
+ */
+int64_t power_on_complete(){
+    gpio_put(PICO_DEFAULT_LED_PIN, 0);
+    rgb(0, 0, 0); // Off
+    return 0;
+}
+
+/**
+ * @brief Alarm handler for the blink alarm.
+ * @return 0 on success.
+ */
+int64_t blink_complete() {
+    rgb(0, 0, 0); // Off
+    return 0;
+}
+
+/**
+ * @brief Alarm handler for the vibrate alarm.
+ * @return 0 on success.
+ */
+int64_t vibrate_complete() {
+    pwm_set_gpio_level(MOTOR_PIN, 0);
+    return 0;
+}
+
+/**
+ * @brief Alarm handler for the input timeout alarm.
+ * @return 0 on success.
+ */
 int64_t input_timeout(){
     tempo_prompt = 0;
     return 0;
 }
 
+/**
+ * @brief Alarm handler for the tap timeout alarm.
+ * @return 0 on success.
+ */
 int64_t tap_timeout(){
     num_taps = 0;
     return 0;
 }
+/** @} */
 
+/**
+ * @defgroup MetronomeFunctions Metronome Functions
+ * @{
+ */
+/**
+ * @brief Stop the metronome.
+ */
 void stop(){
     cancel_repeating_timer(&metronome);
     paused = true;
 }
 
+/**
+ * @brief Set the tempo of the metronome.
+ * @param t Tempo in beats per minute.
+ */
 void set_tempo(uint8_t t){
     if(t < 1) { return; }
     tempo = t;
@@ -206,6 +314,10 @@ void set_tempo(uint8_t t){
     paused = false;
 }
 
+/**
+ * @brief Tick function for the metronome.
+ * @return true on success
+ */
 bool tick() {
     bool is_first = false;
     if(accent && ticks == 0){
@@ -228,28 +340,48 @@ bool tick() {
     return true;
 }
 
+/**
+ * @brief Increase the tempo of the metronome.
+ * @return true on success
+ */
 bool increase_tempo(){
     if(tempo > 0) { tempo--; }
     recalc_interval = true;
+    return true;
 }
 
+/**
+ * @brief Decrease the tempo of the metronome.
+ * @return true on success
+ */
 bool decrease_tempo(){
     if(tempo < 256) { tempo++; }
     recalc_interval = true;
+    return true;
 }
 
+/**
+ * @brief Increase the tempo of the metronome while holding the + key.
+ */
 void increase_tempo_hold(){
     cancel_repeating_timer(&tempo_change);
     add_repeating_timer_ms(50, increase_tempo, NULL, &tempo_change);
     long_pressed_release_lock = false;
 }
 
+/**
+ * @brief Decrease the tempo of the metronome while holding the - key.
+ */
 void decrease_tempo_hold(){
     cancel_repeating_timer(&tempo_change);
     add_repeating_timer_ms(50, decrease_tempo, NULL, &tempo_change);
     long_pressed_release_lock = false;
 }
 
+/**
+ * @brief Set the measure of the metronome.
+ * @param m Measure of the metronome.
+ */
 void set_measure(uint8_t m){
     if(m < 1 || m > 9) { return; }
     subdiv = m;
@@ -257,7 +389,9 @@ void set_measure(uint8_t m){
     if(tempo > 0) { set_tempo(tempo); } // Restart
 }
 
-
+/**
+ * @brief Toggle the pause state of the metronome.
+ */
 // Implemented but not currently used
 void toggle_pause(){
     if(paused = !paused){
@@ -267,10 +401,17 @@ void toggle_pause(){
     }
 }
 
+/**
+ * @brief Toggle the accent state of the metronome.
+ */
 void toggle_accent(){
     accent = !accent;
 }
 
+/**
+ * @brief Type a tempo value.
+ * @param n Digit to type.
+ */
 void type_tempo(uint8_t n){
     stop();
     if(type_timeout_alarm) { cancel_alarm (type_timeout_alarm); }
@@ -282,6 +423,9 @@ void type_tempo(uint8_t n){
     }
 }
 
+/**
+ * @brief Tap the tempo.
+ */
 void tap(){
     stop();
     if(tap_timeout_alarm) { cancel_alarm (tap_timeout_alarm); }
@@ -297,6 +441,10 @@ void tap(){
     last_tap = now;
 }
 
+/**
+ * @brief Save a preset.
+ * @param c Preset number.
+ */
 void save_preset(uint8_t c){
     if(tempo == 0) { return; }
     tempo_presets[c] = tempo;
@@ -309,12 +457,20 @@ void save_preset(uint8_t c){
     set_tempo(tempo); // Restart
 }
 
+/**
+ * @brief Apply a preset.
+ * @param c Preset number.
+ */
 void apply_preset(uint8_t c){
     tempo = tempo_presets[c];
     accent = accent_presets[c];
     set_measure(subdiv_presets[c]);
 }
 
+/**
+ * @brief Key press handler.
+ * @param key Key that was pressed.
+ */
 void key_pressed(uint8_t key){
     last_press = time_us_64();  // Used for dormant mode
 
@@ -328,6 +484,10 @@ void key_pressed(uint8_t key){
     }
 }
 
+/**
+ * @brief Key release handler.
+ * @param key Key that was released.
+ */
 void key_released(uint8_t key){
     if(long_pressed_release_lock) {
         long_pressed_release_lock = false;
@@ -392,6 +552,10 @@ void key_released(uint8_t key){
     blink(BLINK_DURATION_MS, RED); // Feedback blink
 }
 
+/**
+ * @brief Key long press handler.
+ * @param key Key that was long pressed.
+ */
 void key_long_pressed(uint8_t key){
     long_pressed_release_lock = true;
     switch(key){
@@ -447,12 +611,12 @@ void key_long_pressed(uint8_t key){
             break;
     }
 }
+/** @} */
 
-void battery_low_callback(uint16_t battery_mv){
-    gpio_put(LOW_BATT_LED_PIN, 1);
-    battery_check_stop();
-}
-
+/**
+ * @brief Main entry point.
+ * @return 0 on success.
+ */
 int main() {
     stdio_init_all();
     bi_decl_all();
@@ -505,4 +669,5 @@ int main() {
 
     return 0;
 }
+
 
