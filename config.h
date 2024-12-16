@@ -3,7 +3,7 @@
 
 /* Device identifiers */
 #define PROGRAM_NAME           "VRRVRR"
-#define PROGRAM_VERSION        "1.0.0"
+#define PROGRAM_VERSION        "1.0.1"
 #define PROGRAM_DESCRIPTION    "LED-flashing, haptic metronome with presets and tap tempo. Written for Raspberry Pi Pico."
 #define PROGRAM_URL            "https://turiscandurra.com/circuits"
 
